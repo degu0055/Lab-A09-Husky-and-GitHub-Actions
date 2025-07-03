@@ -1,0 +1,68 @@
+name: Validate Terraform
+
+on:
+  pull_request:
+    branches:
+      - main
+      - master
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  terraform_fmt_check:
+    runs-on: ubuntu-latest
+    name: Check Terraform Formatting
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 2
+
+      - name: Fetch Changed Files
+        id: pr_files
+        uses: jitterbit/get-changed-files@v1
+        with:
+          format: "space-delimited"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.2.4
+
+      - name: Run terraform fmt
+        run: |
+          set +e
+          echo "CHECK_STATUS=0" >> $GITHUB_ENV
+          for file in ${{ steps.pr_files.outputs.added_modified }}; do
+            echo "Checking $file..."
+            if [[ $file == *.tf ]]; then
+              terraform fmt -check $file
+              if [[ $? -ne 0 ]]; then
+                echo "❌ terraform fmt failed for $file" >> $GITHUB_STEP_SUMMARY
+                echo "CHECK_STATUS=1" >> $GITHUB_ENV
+              fi
+            fi
+          done
+
+      - name: Fail if any fmt issues
+        if: always()
+        run: exit $CHECK_STATUS
+
+  terraform_validate:
+    runs-on: ubuntu-latest
+    name: Validate Terraform Syntax
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.2.4
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Validate
+        run: terraform validate
+
